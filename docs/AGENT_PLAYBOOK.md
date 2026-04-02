@@ -68,6 +68,8 @@ Use this when user wants one approval and then autonomous processing of many gro
 ## 6. Auth Diagnostics
 
 - Use `tg_auth_status` to verify `authorized=true/false` and current session identity.
+- `tg_auth_status` now also reports `session_path_status`; treat same-session read/actions warning as real risk, not noise.
+- `tgmcp-read` defaults to `TG_SESSION_RUNTIME_MODE=copy`, so duplicate read MCP processes use per-process runtime session copies instead of contending on one sqlite file.
 - Use `scripts/create_session_qr.py` if app/SMS code flow is unreliable.
 - Login code usually comes via Telegram app (`SentCodeTypeApp`), not SMS.
 - If `.env` is restricted, use `TG_SECRET_PROVIDER=keychain|command` for `TG_API_ID/TG_API_HASH`.
@@ -77,8 +79,12 @@ Use this when user wants one approval and then autonomous processing of many gro
 - Shared session is supported with `TG_SESSION_LOCK_MODE=shared`.
 - Shared RPS/circuit state is supported with common `data/anti_spam` and `TG_GLOBAL_RPS_MODE=shared`.
 - Recommended for production:
-- separate read/actions sessions
+- separate read/actions sessions by default
+- read -> `*_ro.session`
+- actions -> main write session
 - dedicated OS user for MCP process
+- configure `TG_READ_SESSION_PATH` and `TG_ACTIONS_SESSION_PATH` in both servers so runtime can detect same-session misconfig
+- run `python3 scripts/check_session_paths.py --config /path/to/.mcp.json` before enabling both servers
 
 ## 8. Never Do This
 

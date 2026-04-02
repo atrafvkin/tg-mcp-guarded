@@ -2,8 +2,9 @@
 set -euo pipefail
 
 REPO_PATH="${1:-}"
+MCP_CONFIG_PATH="${2:-}"
 if [[ -z "${REPO_PATH}" ]]; then
-  echo "Usage: $0 /absolute/path/to/tg-mcp"
+  echo "Usage: $0 /absolute/path/to/tg-mcp [/absolute/path/to/.mcp.json]"
   exit 1
 fi
 
@@ -45,8 +46,17 @@ if [[ ${missing} -eq 1 ]]; then
   exit 2
 fi
 
+if [[ -n "${MCP_CONFIG_PATH}" ]]; then
+  if [[ ! -f "${MCP_CONFIG_PATH}" ]]; then
+    echo "Error: MCP config does not exist: ${MCP_CONFIG_PATH}"
+    exit 2
+  fi
+  echo "Session preflight:"
+  "${PYTHON_BIN}" "${REPO_PATH}/scripts/check_session_paths.py" --config "${MCP_CONFIG_PATH}"
+fi
+
 if compgen -G "${REPO_PATH}/data/sessions/*.session" > /dev/null; then
-  if ! auth_report="$(cd "${REPO_PATH}" && PYTHONPATH=tganalytics:. TG_AUTH_BOOTSTRAP=1 "${PYTHON_BIN}" - <<'PY' 2>/dev/null
+  if ! auth_report="$(cd "${REPO_PATH}" && PYTHONPATH=tganalytics:. TG_AUTH_BOOTSTRAP=1 TG_SESSION_RUNTIME_MODE=copy "${PYTHON_BIN}" - <<'PY' 2>/dev/null
 import asyncio
 from pathlib import Path
 

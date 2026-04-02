@@ -24,7 +24,7 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: tganalytics:.
-          TG_API_ID: "0"
-          TG_API_HASH: "test"
+          TG_API_ID: "1"
+          TG_API_HASH: "testhash"
         run: |
           python -m pytest tests/ -q

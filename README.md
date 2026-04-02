@@ -116,20 +116,27 @@ bash scripts/check_tg_mcp.sh /absolute/path/to/tg-mcp
 # read-only config (safe default)
 python3 scripts/render_mcp_config.py \
   --repo /absolute/path/to/tg-mcp \
-  --profile read
+  --profile read \
+  --read-session-name my_account_ro
 
 # full config (read + actions)
 python3 scripts/render_mcp_config.py \
   --repo /absolute/path/to/tg-mcp \
   --profile full \
-  --read-session-name my_read \
-  --actions-session-name my_actions
+  --read-session-name my_account_ro \
+  --actions-session-name my_account
+
+# preflight: fail fast on same-session misconfig
+python3 scripts/check_session_paths.py \
+  --read-session-path /absolute/path/to/tg-mcp/data/sessions/my_account_ro.session \
+  --actions-session-path /absolute/path/to/tg-mcp/data/sessions/my_account.session
 ```
 
 ## Global MCP Setup (All Projects in Codex)
 
 For one global setup across all working directories, add servers via `codex mcp add`.
-Use one shared `TG_SESSION_PATH` for your read session.
+Recommended default: separate session files for read and actions.
+Routine concurrent read+actions traffic on one Telethon sqlite session can trigger `database is locked`.
 
 ```bash
 REPO="/absolute/path/to/tg-mcp"
@@ -137,7 +144,11 @@ REPO="/absolute/path/to/tg-mcp"
 codex mcp add tgmcp-read \
   --env PYTHONPATH="$REPO/tganalytics:$REPO" \
   --env TG_SESSIONS_DIR="$REPO/data/sessions" \
-  --env TG_SESSION_PATH="$REPO/data/sessions/my_read.session" \
+  --env TG_SESSION_PATH="$REPO/data/sessions/my_account_ro.session" \
+  --env TG_READ_SESSION_PATH="$REPO/data/sessions/my_account_ro.session" \
+  --env TG_ACTIONS_SESSION_PATH="$REPO/data/sessions/my_account.session" \
+  --env TG_SESSION_PATH_CONFLICT_MODE=warn \
+  --env TG_SESSION_CONFLICT_REGISTRY_FILE="$REPO/data/anti_spam/session_registry.json" \
   --env TG_EXPECTED_USERNAME="my_main_account" \
   --env TG_ALLOW_SESSION_SWITCH=0 \
   --env TG_BLOCK_DIRECT_TELETHON_WRITE=1 \
@@ -146,6 +157,7 @@ codex mcp add tgmcp-read \
   --env TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS=actions_mcp \
   --env TG_WRITE_CONTEXT=read_mcp \
   --env TG_ACTION_PROCESS=0 \
+  --env TG_SESSION_RUNTIME_MODE=copy \
   --env TG_RECEIVE_UPDATES=0 \
   --env TG_SESSION_LOCK_MODE=shared \
   --env TG_GLOBAL_RPS_MODE=shared \
@@ -160,7 +172,11 @@ REPO="/absolute/path/to/tg-mcp"
 codex mcp add tgmcp-actions \
   --env PYTHONPATH="$REPO/tganalytics:$REPO" \
   --env TG_SESSIONS_DIR="$REPO/data/sessions" \
-  --env TG_SESSION_PATH="$REPO/data/sessions/my_actions.session" \
+  --env TG_SESSION_PATH="$REPO/data/sessions/my_account.session" \
+  --env TG_READ_SESSION_PATH="$REPO/data/sessions/my_account_ro.session" \
+  --env TG_ACTIONS_SESSION_PATH="$REPO/data/sessions/my_account.session" \
+  --env TG_SESSION_PATH_CONFLICT_MODE=warn \
+  --env TG_SESSION_CONFLICT_REGISTRY_FILE="$REPO/data/anti_spam/session_registry.json" \
   --env TG_EXPECTED_USERNAME="my_main_account" \
   --env TG_ALLOW_SESSION_SWITCH=0 \
   --env TG_ACTIONS_ENABLED=1 \
@@ -193,7 +209,11 @@ Add to your project's `.mcp.json`:
       "env": {
         "PYTHONPATH": "path/to/tg-mcp/tganalytics:path/to/tg-mcp",
         "TG_SESSIONS_DIR": "path/to/tg-mcp/data/sessions",
-        "TG_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_read.session",
+        "TG_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_account_ro.session",
+        "TG_READ_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_account_ro.session",
+        "TG_ACTIONS_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_account.session",
+        "TG_SESSION_PATH_CONFLICT_MODE": "warn",
+        "TG_SESSION_CONFLICT_REGISTRY_FILE": "path/to/tg-mcp/data/anti_spam/session_registry.json",
         "TG_EXPECTED_USERNAME": "my_main_account",
         "TG_ALLOW_SESSION_SWITCH": "0",
         "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
@@ -202,6 +222,7 @@ Add to your project's `.mcp.json`:
         "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
         "TG_WRITE_CONTEXT": "read_mcp",
         "TG_ACTION_PROCESS": "0",
+        "TG_SESSION_RUNTIME_MODE": "copy",
         "TG_RECEIVE_UPDATES": "0",
         "TG_SESSION_LOCK_MODE": "shared",
         "TG_GLOBAL_RPS_MODE": "shared"
@@ -213,7 +234,11 @@ Add to your project's `.mcp.json`:
       "env": {
         "PYTHONPATH": "path/to/tg-mcp/tganalytics:path/to/tg-mcp",
         "TG_SESSIONS_DIR": "path/to/tg-mcp/data/sessions",
-        "TG_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_actions.session",
+        "TG_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_account.session",
+        "TG_READ_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_account_ro.session",
+        "TG_ACTIONS_SESSION_PATH": "path/to/tg-mcp/data/sessions/my_account.session",
+        "TG_SESSION_PATH_CONFLICT_MODE": "warn",
+        "TG_SESSION_CONFLICT_REGISTRY_FILE": "path/to/tg-mcp/data/anti_spam/session_registry.json",
         "TG_EXPECTED_USERNAME": "my_main_account",
         "TG_ALLOW_SESSION_SWITCH": "0",
         "TG_ACTIONS_ENABLED": "1",
@@ -300,8 +325,16 @@ Add to your project's `.mcp.json`:
 ### Session Concurrency
 
 - Default mode is `TG_SESSION_LOCK_MODE=shared`: multiple MCP servers/projects can use one `.session`.
+- `tgmcp-read` now defaults to `TG_SESSION_RUNTIME_MODE=copy`: each MCP process reads from its own runtime shadow of the configured session file, which avoids sqlite lock collisions across multiple Codex clients.
 - Optional strict mode: `TG_SESSION_LOCK_MODE=exclusive` blocks concurrent use of the same session.
-- For production safety, prefer separate sessions for Read and Actions even if shared mode is allowed.
+- Shared session is still allowed, but NOT recommended for routine concurrent `tgmcp-read` + `tgmcp-actions`.
+- Recommended default:
+- `tgmcp-read` -> dedicated `*_ro.session`
+- `tgmcp-actions` -> dedicated write session (for example `account.session`)
+- If both profiles point to one sqlite session file, Telethon can fail with `database is locked`.
+- Set `TG_READ_SESSION_PATH` + `TG_ACTIONS_SESSION_PATH` in both server envs so runtime can warn/fail on same-session misconfig.
+- `TG_SESSION_PATH_CONFLICT_MODE=warn` prints startup/runtime warning; set `fail` to block server start on same-session conflict.
+- Run `python3 scripts/check_session_paths.py --config /path/to/.mcp.json` before enabling both servers.
 - `TG_EXPECTED_USERNAME` enables fail-fast on session/account mismatch (`@expected` vs actual account in session).
 - `TG_RECEIVE_UPDATES=0` (default) disables Telethon updates loop to reduce sqlite session lock contention.
 - `TG_GLOBAL_RPS_MODE=shared` applies one shared RPS budget across all processes using the same `data/anti_spam`.
