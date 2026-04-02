@@ -15,6 +15,7 @@ os.environ.setdefault("TG_ENFORCE_ACTION_PROCESS", "1")
 os.environ.setdefault("TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS", "actions_mcp")
 os.environ.setdefault("TG_WRITE_CONTEXT", "read_mcp")
 os.environ.setdefault("TG_ACTION_PROCESS", "0")
+os.environ.setdefault("TG_SESSION_RUNTIME_MODE", "copy")
 
 from mcp.server.fastmcp import FastMCP
 
@@ -26,7 +27,7 @@ SERVER_NAME = os.environ.get("TG_MCP_SERVER_NAME", "tganalytics-read")
 ALLOW_SESSION_SWITCH = os.environ.get("TG_ALLOW_SESSION_SWITCH", "1") == "1"
 
 mcp = FastMCP(SERVER_NAME)
-ctx = MCPServerContext(allow_session_switch=ALLOW_SESSION_SWITCH)
+ctx = MCPServerContext(allow_session_switch=ALLOW_SESSION_SWITCH, server_profile="read")
 
 
 @mcp.tool()

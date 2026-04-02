@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 import os
 import asyncio
 import atexit
+import hashlib
+import shutil
 import shlex
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -42,6 +47,22 @@ WRITE_ALLOWED_CONTEXTS = {
     for item in os.getenv("TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS", "actions_mcp").split(",")
     if item.strip()
 }
+SESSION_RUNTIME_MODE = os.getenv("TG_SESSION_RUNTIME_MODE", "direct").strip().lower()
+if SESSION_RUNTIME_MODE in {"shadow", "shadow_copy"}:
+    SESSION_RUNTIME_MODE = "copy"
+if SESSION_RUNTIME_MODE not in {"direct", "copy"}:
+    SESSION_RUNTIME_MODE = "direct"
+SESSION_RUNTIME_PROFILE = (
+    os.getenv("TG_SESSION_RUNTIME_PROFILE", "").strip().lower()
+    or WRITE_CONTEXT
+    or "default"
+)
+SESSION_RUNTIME_DIR = Path(
+    os.getenv(
+        "TG_SESSION_RUNTIME_DIR",
+        str((SESSION_DIR / "runtime" / SESSION_RUNTIME_PROFILE).resolve()),
+    )
+)
 
 READ_REQUEST_PREFIXES = (
     "Get",
@@ -202,6 +223,7 @@ if not api_id or not api_hash:
 _client = None
 _clients_by_path = {}
 _session_lock_fds = {}
+_runtime_session_files = set()
 
 
 def _normalize_session_file_path(path: Path) -> Path:
@@ -209,6 +231,88 @@ def _normalize_session_file_path(path: Path) -> Path:
     if path.suffix == ".session":
         return path
     return path.with_suffix(".session")
+
+
+def _runtime_safe_component(value: str) -> str:
+    cleaned = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in value)
+    return cleaned.strip("_") or "session"
+
+
+def _runtime_session_file(source_session_file: Path) -> Path:
+    source = _normalize_session_file_path(source_session_file).expanduser().resolve()
+    digest = hashlib.sha1(str(source).encode("utf-8")).hexdigest()[:10]
+    stem = _runtime_safe_component(source.stem)
+    return (SESSION_RUNTIME_DIR / f"{stem}__{digest}__pid{os.getpid()}.session").resolve()
+
+
+def describe_session_target(session_file: str | Path) -> dict[str, str]:
+    """Describe canonical vs effective session file for the current process."""
+    source = _normalize_session_file_path(Path(session_file)).expanduser().resolve()
+    effective = source
+    if SESSION_RUNTIME_MODE == "copy" and source.exists():
+        effective = _runtime_session_file(source)
+    return {
+        "mode": SESSION_RUNTIME_MODE,
+        "source_session_file": str(source),
+        "effective_session_file": str(effective),
+        "runtime_dir": str(SESSION_RUNTIME_DIR.resolve()),
+    }
+
+
+def _copy_session_sidecars(source: Path, target: Path) -> None:
+    for suffix in ("-journal", "-wal", "-shm"):
+        source_companion = Path(f"{source}{suffix}")
+        target_companion = Path(f"{target}{suffix}")
+        if source_companion.exists():
+            shutil.copy2(source_companion, target_companion)
+
+
+def _prepare_runtime_session_copy(source_session_file: Path, effective_session_file: Path) -> None:
+    if source_session_file == effective_session_file or not source_session_file.exists():
+        return
+
+    SESSION_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    target_key = str(effective_session_file.resolve())
+    if target_key in _runtime_session_files and effective_session_file.exists():
+        return
+
+    for suffix in ("", "-journal", "-wal", "-shm"):
+        candidate = Path(f"{effective_session_file}{suffix}")
+        if candidate.exists():
+            candidate.unlink()
+
+    try:
+        with sqlite3.connect(
+            f"file:{source_session_file.resolve()}?mode=ro",
+            uri=True,
+            timeout=30,
+        ) as source_conn:
+            with sqlite3.connect(str(effective_session_file), timeout=30) as target_conn:
+                source_conn.backup(target_conn)
+                target_conn.commit()
+    except Exception:
+        shutil.copy2(source_session_file, effective_session_file)
+        _copy_session_sidecars(source_session_file, effective_session_file)
+
+    _runtime_session_files.add(target_key)
+
+
+def _cleanup_runtime_session_files() -> None:
+    for runtime_session in list(_runtime_session_files):
+        runtime_path = Path(runtime_session)
+        for suffix in ("", "-journal", "-wal", "-shm", ".lock"):
+            candidate = (
+                runtime_path.with_suffix(runtime_path.suffix + suffix)
+                if suffix == ".lock"
+                else Path(f"{runtime_path}{suffix}")
+            )
+            if not candidate.exists():
+                continue
+            try:
+                candidate.unlink()
+            except Exception:
+                pass
+        _runtime_session_files.discard(runtime_session)
 
 
 def _is_direct_write_allowed() -> bool:
@@ -352,15 +456,27 @@ def _acquire_session_lock(session_file: Path) -> None:
 
 
 atexit.register(_release_session_locks)
+atexit.register(_cleanup_runtime_session_files)
 
 def get_client():
     global _client
     if _client is None:
-        session_file = _normalize_session_file_path(Path(session_path))
+        target = describe_session_target(session_path)
+        source_session_file = Path(target["source_session_file"])
+        session_file = Path(target["effective_session_file"])
+        _prepare_runtime_session_copy(source_session_file, session_file)
         _acquire_session_lock(session_file)
         # Усиливаем права хранилища перед созданием клиента
-        _harden_session_storage(SESSION_DIR, session_file)
-        _client = GuardedTelegramClient(session_path, api_id, api_hash, receive_updates=RECEIVE_UPDATES)
+        _harden_session_storage(session_file.parent, session_file)
+        runtime_session_name = (
+            str(session_file.with_suffix("")) if session_file.suffix == ".session" else str(session_file)
+        )
+        _client = GuardedTelegramClient(
+            runtime_session_name,
+            api_id,
+            api_hash,
+            receive_updates=RECEIVE_UPDATES,
+        )
     return _client
 
 def get_client_for_session(custom_session_file_path: str):
@@ -370,9 +486,11 @@ def get_client_for_session(custom_session_file_path: str):
     """
     if not custom_session_file_path:
         return get_client()
-    session_file = Path(custom_session_file_path)
-    normalized_session_file = _normalize_session_file_path(session_file)
-    session_dir = session_file.parent
+    target = describe_session_target(custom_session_file_path)
+    source_session_file = Path(target["source_session_file"])
+    normalized_session_file = Path(target["effective_session_file"])
+    _prepare_runtime_session_copy(source_session_file, normalized_session_file)
+    session_dir = normalized_session_file.parent
     session_dir.mkdir(parents=True, exist_ok=True)
     _acquire_session_lock(normalized_session_file)
     # Усиливаем права

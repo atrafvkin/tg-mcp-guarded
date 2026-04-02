@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 
@@ -12,12 +13,21 @@ def _build_read_server(
     repo: Path,
     server_name: str,
     session_name: str,
+    actions_session_name: str,
     expected_username: str = "",
 ) -> dict:
+    read_session_path = str((repo / f"data/sessions/{session_name}.session").resolve())
+    actions_session_path = str((repo / f"data/sessions/{actions_session_name}.session").resolve())
     env = {
         "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
         "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
-        "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
+        "TG_SESSION_PATH": read_session_path,
+        "TG_READ_SESSION_PATH": read_session_path,
+        "TG_ACTIONS_SESSION_PATH": actions_session_path,
+        "TG_SESSION_PATH_CONFLICT_MODE": "warn",
+        "TG_SESSION_CONFLICT_REGISTRY_FILE": str(
+            (repo / "data/anti_spam/session_registry.json").resolve()
+        ),
         "TG_ALLOW_SESSION_SWITCH": "0",
         "TG_BLOCK_DIRECT_TELETHON_WRITE": "1",
         "TG_ALLOW_DIRECT_TELETHON_WRITE": "0",
@@ -25,6 +35,7 @@ def _build_read_server(
         "TG_DIRECT_TELETHON_WRITE_ALLOWED_CONTEXTS": "actions_mcp",
         "TG_WRITE_CONTEXT": "read_mcp",
         "TG_ACTION_PROCESS": "0",
+        "TG_SESSION_RUNTIME_MODE": "copy",
         "TG_RECEIVE_UPDATES": "0",
         "TG_SESSION_LOCK_MODE": "shared",
         "TG_GLOBAL_RPS_MODE": "shared",
@@ -47,12 +58,21 @@ def _build_actions_server(
     repo: Path,
     server_name: str,
     session_name: str,
+    read_session_name: str,
     expected_username: str = "",
 ) -> dict:
+    actions_session_path = str((repo / f"data/sessions/{session_name}.session").resolve())
+    read_session_path = str((repo / f"data/sessions/{read_session_name}.session").resolve())
     env = {
         "PYTHONPATH": f"{(repo / 'tganalytics').resolve()}:{repo.resolve()}",
         "TG_SESSIONS_DIR": str((repo / "data/sessions").resolve()),
-        "TG_SESSION_PATH": str((repo / f"data/sessions/{session_name}.session").resolve()),
+        "TG_SESSION_PATH": actions_session_path,
+        "TG_READ_SESSION_PATH": read_session_path,
+        "TG_ACTIONS_SESSION_PATH": actions_session_path,
+        "TG_SESSION_PATH_CONFLICT_MODE": "warn",
+        "TG_SESSION_CONFLICT_REGISTRY_FILE": str(
+            (repo / "data/anti_spam/session_registry.json").resolve()
+        ),
         "TG_ALLOW_SESSION_SWITCH": "0",
         "TG_ACTIONS_ENABLED": "1",
         "TG_ACTIONS_REQUIRE_ALLOWLIST": "1",
@@ -110,7 +130,7 @@ def main() -> int:
     )
     parser.add_argument("--read-server-name", default="tgmcp-read")
     parser.add_argument("--actions-server-name", default="tgmcp-actions")
-    parser.add_argument("--read-session-name", default="read_only_session")
+    parser.add_argument("--read-session-name", default="read_only_ro")
     parser.add_argument("--actions-session-name", default="actions_session")
     parser.add_argument(
         "--expected-username",
@@ -122,11 +142,21 @@ def main() -> int:
 
     repo = Path(args.repo).expanduser().resolve()
     servers = {}
+    read_session_path = str((repo / f"data/sessions/{args.read_session_name}.session").resolve())
+    actions_session_path = str((repo / f"data/sessions/{args.actions_session_name}.session").resolve())
+    if args.profile == "full" and read_session_path == actions_session_path:
+        print(
+            "[tg-mcp][session-warning] read/actions resolve to the same session file. "
+            "This is supported but not recommended for routine concurrent MCP traffic. "
+            "Prefer read -> *_ro.session and actions -> write session.",
+            file=sys.stderr,
+        )
     servers.update(
         _build_read_server(
             repo,
             args.read_server_name,
             args.read_session_name,
+            args.actions_session_name,
             expected_username=args.expected_username,
         )
     )
@@ -136,6 +166,7 @@ def main() -> int:
                 repo,
                 args.actions_server_name,
                 args.actions_session_name,
+                args.read_session_name,
                 expected_username=args.expected_username,
             )
         )

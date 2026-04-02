@@ -1,4 +1,6 @@
 import os
+import sqlite3
+from pathlib import Path
 
 os.environ.setdefault("TG_API_ID", "1")
 os.environ.setdefault("TG_API_HASH", "testhash")
@@ -121,3 +123,50 @@ def test_get_client_disables_updates_loop_by_default(monkeypatch, tmp_path):
     tele_client.get_client()
 
     assert captured["kwargs"]["receive_updates"] is False
+
+
+def test_describe_session_target_uses_runtime_copy_for_existing_session(monkeypatch, tmp_path):
+    source = tmp_path / "dmatskevich_ro.session"
+    source.write_text("seed", encoding="utf-8")
+
+    monkeypatch.setattr(tele_client, "SESSION_RUNTIME_MODE", "copy")
+    monkeypatch.setattr(tele_client, "SESSION_RUNTIME_DIR", tmp_path / "runtime")
+
+    target = tele_client.describe_session_target(str(source))
+
+    assert target["mode"] == "copy"
+    assert target["source_session_file"] == str(source.resolve())
+    assert target["effective_session_file"] != str(source.resolve())
+    assert target["effective_session_file"].startswith(str((tmp_path / "runtime").resolve()))
+
+
+def test_get_client_for_session_uses_runtime_copy_when_enabled(monkeypatch, tmp_path):
+    source = tmp_path / "dmatskevich_ro.session"
+    with sqlite3.connect(str(source)) as conn:
+        conn.execute("create table version (value text)")
+        conn.execute("insert into version values ('shadow-copy-ok')")
+        conn.commit()
+
+    captured = {}
+
+    class DummyClient:
+        def __init__(self, session, api_id, api_hash, **kwargs):
+            captured["session"] = session
+            captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(tele_client, "_clients_by_path", {})
+    monkeypatch.setattr(tele_client, "_runtime_session_files", set())
+    monkeypatch.setattr(tele_client, "SESSION_RUNTIME_MODE", "copy")
+    monkeypatch.setattr(tele_client, "SESSION_RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(tele_client, "_acquire_session_lock", lambda *_: None)
+    monkeypatch.setattr(tele_client, "_harden_session_storage", lambda *_: None)
+    monkeypatch.setattr(tele_client, "GuardedTelegramClient", DummyClient)
+
+    tele_client.get_client_for_session(str(source))
+
+    runtime_session_file = Path(captured["session"]).with_suffix(".session")
+    with sqlite3.connect(str(runtime_session_file)) as conn:
+        value = conn.execute("select value from version").fetchone()[0]
+
+    assert value == "shadow-copy-ok"
+    assert runtime_session_file != source.resolve()
