@@ -136,7 +136,7 @@ def _parse_allowlist(raw: str) -> set[str]:
 ALLOWED_TARGETS = _parse_allowlist(os.environ.get("TG_ACTIONS_ALLOWED_GROUPS", ""))
 
 mcp = FastMCP(SERVER_NAME)
-ctx = MCPServerContext(allow_session_switch=ALLOW_SESSION_SWITCH)
+ctx = MCPServerContext(allow_session_switch=ALLOW_SESSION_SWITCH, server_profile="actions")
 
 
 def _check_target_allowed(group: str) -> tuple[bool, str | None]:
@@ -1229,6 +1229,7 @@ async def tg_run_add_member_batch(batch_id: str, max_actions: int = 100) -> dict
 async def tg_get_actions_policy() -> dict[str, Any]:
     """Return active action policy gates and limits."""
     limiter_stats = get_rate_limiter().get_stats()
+    session_path_status = ctx.session_path_status()
     return {
         "server_profile": "actions",
         "actions_enabled": ACTIONS_ENABLED,
@@ -1259,6 +1260,8 @@ async def tg_get_actions_policy() -> dict[str, Any]:
         "destructive_actions_require_confirm": True,
         "default_dry_run_for_member_actions": True,
         "allow_session_switch": ALLOW_SESSION_SWITCH,
+        "session_path_status": session_path_status,
+        "session_path_conflict": session_path_status.get("conflict"),
         "recommended_write_flow": [
             "1) Call write tool with dry_run=true to preview and get approval_code.",
             "2) Ask user for exact confirmation_text phrase in this thread.",

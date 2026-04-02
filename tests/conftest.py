@@ -2,6 +2,7 @@
 Pytest configuration for tg-mcp tests
 """
 
+import os
 import sys
 from pathlib import Path
 import pytest
@@ -15,6 +16,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TGANALYTICS_PKG = REPO_ROOT / "tganalytics"
 if str(TGANALYTICS_PKG) not in sys.path:
     sys.path.insert(0, str(TGANALYTICS_PKG))
+
+# Some modules validate Telegram API creds at import time; keep test collection hermetic.
+os.environ.setdefault("TG_API_ID", "1")
+os.environ.setdefault("TG_API_HASH", "testhash")
 
 class AsyncIteratorMock:
     """Мок для асинхронного итератора"""
