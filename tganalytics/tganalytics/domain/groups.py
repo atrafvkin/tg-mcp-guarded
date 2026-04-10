@@ -1057,8 +1057,10 @@ class GroupManager:
         if isinstance(group_identifier, int):
             return await _safe_api_call(self.client.get_entity, group_identifier)
 
-        if isinstance(group_identifier, str) and (group_identifier.startswith('-') and group_identifier[1:].isdigit()):
-            return await _safe_api_call(self.client.get_entity, int(group_identifier))
+        if isinstance(group_identifier, str):
+            normalized_numeric = group_identifier.strip()
+            if normalized_numeric.lstrip('-').isdigit():
+                return await _safe_api_call(self.client.get_entity, int(normalized_numeric))
 
         if isinstance(group_identifier, str) and ' ' in group_identifier:
             # Название с пробелами — ищем только через диалоги
