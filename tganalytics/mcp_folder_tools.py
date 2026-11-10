@@ -26,7 +26,11 @@ def describe_folder(folder: Any) -> dict:
         "title": getattr(title, "text", title),
         **{flag: bool(getattr(folder, flag, False)) for flag in FLAGS},
         **{
-            key: [utils.get_peer_id(peer) for peer in getattr(folder, key, [])]
+            key: (
+                [utils.get_peer_id(peer) for peer in getattr(folder, key, [])]
+                if key == "pinned_peers"
+                else sorted(utils.get_peer_id(peer) for peer in getattr(folder, key, []))
+            )
             for key in PEERS
         },
     }

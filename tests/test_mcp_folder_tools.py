@@ -16,6 +16,7 @@ class FakeClient:
         )]
         self.writes = 0
         self.drop_write = False
+        self.reverse_exclusions = False
 
     async def get_me(self):
         return SimpleNamespace(id=1, username="owner", premium=True)
@@ -29,6 +30,8 @@ class FakeClient:
         assert isinstance(request, UpdateDialogFilterRequest)
         self.writes += 1
         if not self.drop_write:
+            if self.reverse_exclusions:
+                request.filter.exclude_peers.reverse()
             self.filters = [f for f in self.filters if f.id != request.id] + [request.filter]
         return True
 
@@ -146,3 +149,16 @@ async def test_rejects_main_list_filter_even_with_excluded_peers(setup):
     result = await handler.tg_put_chat_folder(**payload)
     assert not result["success"] and "all five" in result["error"]
     assert client.writes == 0
+
+
+@pytest.mark.asyncio
+async def test_server_may_reorder_exclusion_peers(setup):
+    handler, client, payload = setup
+    client.reverse_exclusions = True
+    preview = await handler.tg_put_chat_folder(**payload)
+    result = await handler.tg_put_chat_folder(
+        **payload, dry_run=False, confirm=True, confirmation_text="ok",
+        approval_code=preview["approval_code"],
+    )
+    assert result["success"] and result["server_verified"]
+    assert result["folder"]["exclude_peers"] == [7, 8]
