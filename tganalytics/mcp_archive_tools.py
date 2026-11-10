@@ -104,6 +104,10 @@ class ArchiveTools:
                 "Folder membership changed; inspect and preview again",
                 actual_count=len(selected),
             )
+        # Telegram cannot archive Saved Messages or its service-notification
+        # dialog (also enforced by TDLib MessagesManager::add_dialog_to_list).
+        unarchivable = sorted(selected & {account_id, 777000})
+        pending = [d for d in pending if d.id not in unarchivable]
         archive_states = {str(d.id): bool(d.archived) for d in dialogs}
         action_hash = hash_payload({
             "action": "archive_folder_chats", "account_id": account_id,
@@ -121,6 +125,7 @@ class ArchiveTools:
                 "folder_before": describe_folder(folder),
                 "folder_after": describe_folder(desired),
                 "folder_members": len(selected), "to_archive": len(pending),
+                "unarchivable_chat_ids": unarchivable,
                 "chat_ids": sorted(selected), "action_hash": action_hash,
                 "confirmation_text_required": p["CONFIRMATION_PHRASE"],
                 **(approval or {}),
@@ -168,7 +173,8 @@ class ArchiveTools:
         saved = next((f for f in after if getattr(f, "id", 0) == folder_id), None)
         current_by_id = {d.id: d for d in current}
         not_archived = sorted(
-            cid for cid in selected if cid not in current_by_id or not current_by_id[cid].archived
+            cid for cid in selected - set(unarchivable)
+            if cid not in current_by_id or not current_by_id[cid].archived
         )
         outside_changed = sorted(
             int(cid) for cid, archived in archive_states.items()
@@ -191,8 +197,10 @@ class ArchiveTools:
             )
         p["_mark_action_executed"](action_hash)
         return {
-            "success": True, "server_verified": True, "account_id": account_id,
+            "success": not unarchivable, "server_verified": True, "account_id": account_id,
             "folder": describe_folder(saved), "archived_now": len(pending),
-            "folder_members": len(selected), "remaining_in_all_chats": 0,
+            "folder_members": len(selected), "remaining_in_all_chats": len(unarchivable),
+            "unarchivable_chat_ids": unarchivable,
+            "error": "Telegram cannot archive Saved Messages or service notifications" if unarchivable else None,
             "other_chats_unchanged": True, "state_hash": state_hash(after),
         }

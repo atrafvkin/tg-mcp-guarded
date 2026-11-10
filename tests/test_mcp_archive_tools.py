@@ -165,3 +165,20 @@ def test_explicit_membership_survives_archive_but_prior_archive_stays_out():
     desired, ids, pending = archive.archive_plan(source, original, 1)
     assert ids == {7} and pending == []
     assert [utils.get_peer_id(p) for p in desired.exclude_peers] == [8]
+
+
+@pytest.mark.asyncio
+async def test_reports_unarchivable_system_chats_without_attempting_them(setup):
+    handler, client, payload = setup
+    client.filters[1].contacts = True
+    client.dialogs += [dialog(1), dialog(777000)]
+    payload["expected_chat_ids"] += [1, 777000]
+    payload["expected_state_hash"] = folders.state_hash(client.filters)
+    preview = await handler.tg_archive_folder_chats(**payload)
+    assert preview["to_archive"] == 205
+    assert preview["unarchivable_chat_ids"] == [1, 777000]
+    result = await execute(handler, payload, preview)
+    assert not result["success"] and result["server_verified"]
+    assert result["remaining_in_all_chats"] == 2
+    assert result["unarchivable_chat_ids"] == [1, 777000]
+    assert not {1, 777000} & set.union(*client.batches)

@@ -75,4 +75,10 @@ automatic unarchiving settings. A partial failure reports completed IDs; inspect
 the current server state before preparing a retry. No history is deleted and no
 group is left. Archive state remains reversible through Telegram.
 
+Telegram does not permit archiving Saved Messages or service notifications
+(user 777000). These IDs are reported in `unarchivable_chat_ids` in the preview
+and result and never sent in an archive batch. When present, execution returns
+`success=false` with `server_verified=true` after archiving all eligible chats;
+`remaining_in_all_chats` makes this unavoidable partial outcome explicit.
+
 Validation: `venv/bin/python -m pytest tests/test_mcp_archive_tools.py -q`.
