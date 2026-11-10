@@ -229,3 +229,8 @@ def register_folder_tools(mcp: Any, ctx: Any, policy: dict | None = None) -> Non
         mcp.tool(annotations={"destructiveHint": True, "idempotentHint": True})(
             handlers.tg_put_chat_folder
         )
+        from mcp_archive_tools import ArchiveTools
+
+        mcp.tool(annotations={"destructiveHint": True, "idempotentHint": True})(
+            ArchiveTools(ctx, policy).tg_archive_folder_chats
+        )

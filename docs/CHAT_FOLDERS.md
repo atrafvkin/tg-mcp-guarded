@@ -53,3 +53,26 @@ under the ignored `data/` directory.
 Protocol reference: https://core.telegram.org/api/folders
 
 Validation: `venv/bin/python -m pytest tests/test_mcp_folder_tools.py -q`.
+
+## Archive a folder's current members
+
+`tg_archive_folder_chats` is an actions-only workflow. Supply `account_id`,
+`folder_id`, `expected_state_hash` and the complete `expected_chat_ids` from a
+fresh inventory. The dry run binds the exact chat set, folder settings and
+archive placement. Execute with the existing confirmation and approval gates.
+
+It first removes the folder's archive exclusion and explicitly excludes any
+previously archived chats that would otherwise become newly visible. It preserves
+the title, category rules, pinned/included peers, presentation and other folders.
+After verifying this preparation, it archives the selected chats in batches of
+100 using `folders.editPeerFolders`, then re-reads both archive placement and
+folder membership. It reports success only when the original chat set remains
+visible in the folder, all its chats are archived, and other chats are unchanged.
+
+The workflow rejects read/mute filters, inventories above 5000 dialogs, and plans
+requiring more than 200 excluded chats. It does not mute notifications or change
+automatic unarchiving settings. A partial failure reports completed IDs; inspect
+the current server state before preparing a retry. No history is deleted and no
+group is left. Archive state remains reversible through Telegram.
+
+Validation: `venv/bin/python -m pytest tests/test_mcp_archive_tools.py -q`.
