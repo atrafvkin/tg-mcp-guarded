@@ -156,5 +156,10 @@ async def tg_auth_status() -> dict:
     return await ctx.auth_status()
 
 
+from mcp_folder_tools import register_folder_tools
+
+register_folder_tools(mcp, ctx)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
