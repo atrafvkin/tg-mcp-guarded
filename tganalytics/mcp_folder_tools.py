@@ -115,6 +115,11 @@ class FolderTools:
             return policy["_blocked"]("Use folder_id 2..255 and a title of 1..12 characters")
         if not expected_state_hash or not set(include_types) <= set(FLAGS[:5]):
             return policy["_blocked"]("Invalid revision hash or include_types")
+        if exclude_archived and set(include_types) == set(FLAGS[:5]):
+            return policy["_blocked"](
+                "Telegram rejects all five chat types with exclude_archived. "
+                "Omit one type and include its current desired chats explicitly."
+            )
         if len(include_peer_ids) > 200 or len(exclude_peer_ids) > 200:
             return policy["_blocked"]("At most 200 explicit include/exclude peers are supported")
         if set(include_peer_ids) & set(exclude_peer_ids):

@@ -62,7 +62,7 @@ def setup(monkeypatch, tmp_path):
         "account_id": 1, "folder_id": 3, "title": "work",
         "expected_state_hash": folders.state_hash(client.filters),
         "include_peer_ids": [], "exclude_peer_ids": [7, 8],
-        "include_types": list(folders.FLAGS[:5]),
+        "include_types": ["contacts", "non_contacts", "groups", "bots"],
     }
     return handler, client, payload
 
@@ -137,3 +137,12 @@ async def test_read_profile_registers_no_write_tool():
     folders.register_folder_tools(mcp, None)
     tools = await mcp.list_tools()
     assert [tool.name for tool in tools] == ["tg_get_chat_folders"]
+
+
+@pytest.mark.asyncio
+async def test_rejects_main_list_filter_even_with_excluded_peers(setup):
+    handler, client, payload = setup
+    payload["include_types"] = list(folders.FLAGS[:5])
+    result = await handler.tg_put_chat_folder(**payload)
+    assert not result["success"] and "all five" in result["error"]
+    assert client.writes == 0

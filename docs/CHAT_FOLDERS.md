@@ -17,10 +17,14 @@ and clears its pinned peers and presentation options; inspect the preview first.
    `tg_get_chat_folders(include_dialogs=false)`.
 2. Discover exact chat IDs and archive state:
    `tg_get_chat_folders(include_dialogs=true)`.
-3. Preview a new folder with all five `include_types` (`contacts`, `non_contacts`,
-   `groups`, `broadcasts`, `bots`), `exclude_archived=true`, and explicit
-   `exclude_peer_ids`. Pass the owner `account_id`, an unused `folder_id` (2..255),
-   a title up to 12 characters, `include_peer_ids=[]`, and the read's
+3. Preview a new folder with `include_types` such as `contacts`, `non_contacts`,
+   `groups`, `bots`, `exclude_archived=true`, and explicit `exclude_peer_ids`.
+   Telegram rejects all five types together with archive exclusion, even with
+   excluded peers. To capture all current eligible chats, omit one type and put
+   its current eligible IDs into `include_peer_ids`. New chats of that omitted
+   type will require explicit addition; explicit peers override archive rules.
+   Pass the owner `account_id`, an unused `folder_id` (2..255),
+   a title up to 12 characters, the desired `include_peer_ids`, and the read's
    `expected_state_hash` to `tg_put_chat_folder(dry_run=true, ...)`.
 4. After the human supplies the configured exact confirmation phrase, repeat
    that same payload with `dry_run=false`, `confirm=true`, `confirmation_text`
