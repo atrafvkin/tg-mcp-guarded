@@ -173,6 +173,9 @@ class FolderTools:
             exclude_archived=exclude_archived,
             **{flag: flag in include_types for flag in FLAGS[:5]},
         )
+        if existing is not None:
+            for attr in ("emoticon", "color", "title_noanimate"):
+                setattr(desired, attr, getattr(existing, attr, None))
         summary = describe_folder(desired)
         action_hash = hash_payload({
             "action": "put_chat_folder", "account_id": account_id,

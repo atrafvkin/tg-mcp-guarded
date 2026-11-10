@@ -162,3 +162,22 @@ async def test_server_may_reorder_exclusion_peers(setup):
     )
     assert result["success"] and result["server_verified"]
     assert result["folder"]["exclude_peers"] == [7, 8]
+
+
+@pytest.mark.asyncio
+async def test_membership_edit_preserves_existing_presentation(setup):
+    handler, client, payload = setup
+    client.filters[0].color = 4
+    client.filters[0].emoticon = "📚"
+    client.filters[0].title_noanimate = True
+    payload["folder_id"] = 2
+    payload["expected_state_hash"] = folders.state_hash(client.filters)
+    preview = await handler.tg_put_chat_folder(**payload)
+    result = await handler.tg_put_chat_folder(
+        **payload, dry_run=False, confirm=True, confirmation_text="ok",
+        approval_code=preview["approval_code"],
+    )
+    assert result["success"]
+    assert client.filters[0].color == 4
+    assert client.filters[0].emoticon == "📚"
+    assert client.filters[0].title_noanimate is True

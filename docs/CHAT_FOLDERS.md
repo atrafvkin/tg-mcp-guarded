@@ -9,7 +9,7 @@ silently truncated.
 `tg_put_chat_folder` is available only in the actions server. It creates or
 replaces one personal folder. It cannot delete chats, leave groups, replace a
 shared folder or alter any other folder. Replacing a folder replaces its rules
-and clears its pinned peers and presentation options; inspect the preview first.
+and clears its pinned peers while preserving presentation options; inspect the preview first.
 
 ## Examples
 
