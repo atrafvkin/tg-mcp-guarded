@@ -878,7 +878,15 @@ class GroupManager:
             if dry_run:
                 return result
 
-            if isinstance(group_entity, Channel):
+            if isinstance(group_entity, Channel) and getattr(user_entity, 'is_self', False) is True:
+                from telethon.tl.functions.channels import LeaveChannelRequest
+
+                await _safe_api_call(
+                    self.client,
+                    LeaveChannelRequest(channel=group_entity),
+                    operation_type="join",
+                )
+            elif isinstance(group_entity, Channel):
                 from telethon.tl.functions.channels import EditBannedRequest
                 from telethon.tl.types import ChatBannedRights
 
